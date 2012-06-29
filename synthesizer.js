@@ -1,0 +1,211 @@
+// Copyright 2012 Google Inc. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview A moog-like audio synthesizer built on top of the HTML5 Web
+ * Audio API.
+ */
+goog.provide('doodle.moog.Synthesizer');
+
+goog.require('doodle.moog.CompoundAudioNode');
+goog.require('doodle.moog.OscillatorInterface');
+goog.require('doodle.moog.SynthesizerInterface');
+goog.require('goog.array');
+goog.require('goog.userAgent');
+
+
+
+/**
+ * A Moog-like synthesizer built on top of the HTML5 Web Audio API.
+ * @param {!AudioContext} audioContext Audio context in which this synthesizer
+ *     will operate.
+ * @param {!Array.<!doodle.moog.Oscillator>} oscillators The oscillators used
+ *     within this synthesizer.
+ * @param {!doodle.moog.LowPassFilter} lowPassFilter The low pass filter used
+ *     within this synthesizer.
+ * @param {number} volume How much the gain should be adjusted.
+ * @implements {doodle.moog.CompoundAudioNode}
+ * @implements {doodle.moog.SynthesizerInterface}
+ * @constructor
+ */
+doodle.moog.Synthesizer = function(
+    audioContext, oscillators, lowPassFilter, volume) {
+  /**
+   * The audio context in which this synthesizer operates.
+   * @type {!AudioContext}
+   * @private
+   */
+  this.audioContext_ = audioContext;
+
+  /**
+   * Oscillators used to generate synthesizer sounds.
+   * @type {!Array.<!doodle.moog.Oscillator>}
+   */
+  this.oscillators = oscillators;
+
+  /**
+   * Filter used to cut off high frequencies.
+   * @type {!doodle.moog.LowPassFilter}
+   */
+  this.lowPassFilter = lowPassFilter;
+
+  /**
+   * The volume Web Audio node.
+   * @type {!AudioGainNode}
+   * @private
+   */
+  this.volumeNode_ = audioContext.createGainNode();
+
+  /**
+   * Frequency analyser node.
+   * @type {!RealtimeAnalyserNode}
+   */
+  this.analyserNode = audioContext.createAnalyser();
+  this.analyserNode.smoothingTimeConstant = 0.5;
+
+  /**
+   * Volume/gain adjustment to apply to the output signal.
+   * @type {number}
+   * @private
+   */
+  this.volume_;
+  this.setVolume(volume);
+
+  /**
+   * Web Audio JavaScript node used by oscillators to generate sound.
+   * Chrome 20+ won't connect a js node with no inputs for some reason.
+   * @type {!JavaScriptAudioNode}
+   * @private
+   */
+  this.jsAudioNode_ = goog.userAgent.isVersion('20.0') ?
+      audioContext.createJavaScriptNode(
+          doodle.moog.Synthesizer.BUFFER_SIZE_, 1, 1) :
+      audioContext.createJavaScriptNode(
+          doodle.moog.Synthesizer.BUFFER_SIZE_, 0, 1);
+
+  this.jsAudioNode_.onaudioprocess = goog.bind(this.fillAudioBuffer_, this);
+  this.jsAudioNode_.connect(this.lowPassFilter.getSourceNode());
+  this.lowPassFilter.connect(this.volumeNode_);
+  this.volumeNode_.connect(this.analyserNode);
+};
+
+
+/**
+ * How many samples to fill at a time in a JavaScript audio node callback.  A
+ * larger number here will decrease the chance of jitters/gaps at the expense of
+ * control latency.
+ * @type {number}
+ * @const
+ * @private
+ */
+doodle.moog.Synthesizer.BUFFER_SIZE_ = 1024;
+
+
+/** @inheritDoc */
+doodle.moog.Synthesizer.prototype.setKeyDown = function(note) {
+  goog.array.forEach(this.oscillators, function(oscillator) {
+    oscillator.setActiveNote(note);
+    oscillator.envelopeGenerator.startAttack();
+  });
+  this.lowPassFilter.startAttack();
+};
+
+
+/** @inheritDoc */
+doodle.moog.Synthesizer.prototype.setKeyDownCallback = function(callback) {
+  // No-op, since this is only required on non-WebAudio browsers.
+};
+
+
+/** @inheritDoc */
+doodle.moog.Synthesizer.prototype.setKeyUp = function() {
+  goog.array.forEach(this.oscillators, function(oscillator) {
+    oscillator.envelopeGenerator.startRelease();
+  });
+};
+
+
+/** @inheritDoc */
+doodle.moog.Synthesizer.prototype.setLpCutoffFrequency =
+    function(cutoffFrequency) {
+  this.lowPassFilter.setCutoffFrequency(cutoffFrequency);
+};
+
+
+/** @inheritDoc */
+doodle.moog.Synthesizer.prototype.setLpContour = function(contour) {
+  this.lowPassFilter.setContour(contour);
+};
+
+
+/** @inheritDoc */
+doodle.moog.Synthesizer.prototype.setLpContourAttackTime = function(time) {
+  this.lowPassFilter.setContourAttackTime(time);
+};
+
+
+/** @inheritDoc */
+doodle.moog.Synthesizer.prototype.setLpContourDecayTime = function(time) {
+  this.lowPassFilter.setContourDecayTime(time);
+};
+
+
+/** @inheritDoc */
+doodle.moog.Synthesizer.prototype.setLpContourSustainLevel = function(level) {
+  this.lowPassFilter.setContourSustainLevel(level);
+};
+
+
+/**
+ * Fills the passed audio buffer with tones generated by oscillators.
+ * @param {!AudioProcessingEvent} e The audio process event object.
+ * @private
+ */
+doodle.moog.Synthesizer.prototype.fillAudioBuffer_ = function(e) {
+  // NOTE: We fill oscillator 2 first since it generates a modulation control
+  // signal on which oscillators 0 and 1 depend.
+  this.oscillators[2].fillAudioBuffer(
+      e, null, doodle.moog.OscillatorInterface.FillMode.CLOBBER);
+  this.oscillators[0].fillAudioBuffer(
+      e, this.oscillators[2].modulatorSignal,
+      doodle.moog.OscillatorInterface.FillMode.ADD);
+  this.oscillators[1].fillAudioBuffer(
+      e, this.oscillators[2].modulatorSignal,
+      doodle.moog.OscillatorInterface.FillMode.MIX, this.oscillators.length);
+};
+
+
+/** @inheritDoc */
+doodle.moog.Synthesizer.prototype.setVolume = function(volume) {
+  this.volume_ = volume;
+  this.volumeNode_.gain.value = volume;
+};
+
+
+/** @override */
+doodle.moog.Synthesizer.prototype.getSourceNode = function() {
+  return this.jsAudioNode_;
+};
+
+
+/** @override */
+doodle.moog.Synthesizer.prototype.connect = function(destination) {
+  this.analyserNode.connect(destination);
+};
+
+
+/** @override */
+doodle.moog.Synthesizer.prototype.disconnect = function() {
+  this.analyserNode.disconnect();
+};
