@@ -34,9 +34,15 @@
 <h1>Moog Doodle Demo Page</h1>
 To get this running:
 <ul>
-  <li>Download
-      <a href="http://code.google.com/p/closure-library/source/browse/#svn%2Ftrunk%2Fclosure%2Fgoog">Closure
-    Library</a> to a folder named 'closure' in this directory.</li>
+  <li>If you got this code by:
+    <ul>
+    <li>tarball/zip, then download
+        <a href="http://code.google.com/p/closure-library/source/browse/#svn%2Ftrunk">Closure
+      Library</a> to a folder named 'closure' in this directory.</li>
+    <li>git clone, then run
+        <code>git submodule init && git submodule update</code></li>
+    </ul>
+  </li>
   <li>Make sure volume is unmuted, speakers are on, etc.</li>
   <li>Open this file in a Web Audio enabled browser like Chrome.</li>
   <li>Press the buttons below to play tones.</li>
@@ -59,8 +65,8 @@ To get this running:
 <h2>Cutoff Frequency</h2>
 <input id=cutoff type=range min=20 max=5000 value=2100 style=width:500px>
 
-<script src="closure/base.js"></script>
-<script src="closure/deps.js"></script>
+<script src="closure/closure/goog/base.js"></script>
+<script src="closure/closure/goog/deps.js"></script>
 <script src="deps.js"></script>
 <script>
 goog.require('doodle.moog.Moog');
