@@ -18,6 +18,16 @@
 <head>
   <meta charset="utf-8">
   <title>Moog JS Demo</title>
+  <style type="text/css">
+    #keyboard > button {
+      background-color: #eee;
+      border: 2px solid black;
+      cursor: pointer;
+      font-weight: bold;
+      height: 50px;
+      width: 50px;
+    }
+  </style>
 </head>
 <body>
 
@@ -29,7 +39,25 @@ To get this running:
     Library</a> to a folder named 'closure' in this directory.</li>
   <li>Make sure volume is unmuted, speakers are on, etc.</li>
   <li>Open this file in a Web Audio enabled browser like Chrome.</li>
+  <li>Press the buttons below to play tones.</li>
 </ul>
+
+<h2>Keys</h2>
+<div id=keyboard>
+  <button>0</button>
+  <button>1</button>
+  <button>2</button>
+  <button>3</button>
+  <button>4</button>
+  <button>5</button>
+  <button>6</button>
+  <button>7</button>
+  <button>8</button>
+  <button>9</button>
+</div>
+
+<h2>Cutoff Frequency</h2>
+<input id=cutoff type=range min=20 max=5000 value=2100 style=width:500px>
 
 <script src="closure/base.js"></script>
 <script src="closure/deps.js"></script>
@@ -41,11 +69,23 @@ window.onload = function() {
   var moog = new doodle.moog.Moog();
   moog.turnOnAudio();
 
-  // Play a note for 5 seconds.
-  moog.synthesizers_[0].setKeyDown(4);
-  setTimeout(function() {
+  var keyboard = document.getElementById('keyboard');
+  keyboard.addEventListener('mousedown', function(e) {
+    if (e.target.tagName == 'BUTTON') {
+      moog.synthesizers_[0].setKeyDown(parseInt(e.target.innerHTML, 10));
+    }
+  }, false);
+  keyboard.addEventListener('mouseup', function(e) {
     moog.synthesizers_[0].setKeyUp();
-  }, 5000);
+  }, false);
+  keyboard.addEventListener('mouseout', function(e) {
+    moog.synthesizers_[0].setKeyUp();
+  }, false);
+
+  var cutoff = document.getElementById('cutoff');
+  cutoff.addEventListener('change', function() {
+    moog.synthesizers_[0].lowPassFilter.setCutoffFrequency(cutoff.value);
+  }, false);
 };
 </script>
 
